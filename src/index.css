@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme {
+  --font-times: "Times New Roman", Times, serif;
+  --font-inter: "Inter", sans-serif;
+  --font-space: "Space Grotesk", sans-serif;
+}
+
+/* Base font */
+html {
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Modern button styles */
+.btn-primary {
+  @apply bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl
+         shadow-md shadow-blue-500/20
+         transition-all duration-200 ease-out cursor-pointer
+         hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5
+         active:translate-y-0 active:shadow-md active:scale-[0.98];
+}
+
+.btn-secondary {
+  @apply bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl
+         shadow-md shadow-emerald-500/20
+         transition-all duration-200 ease-out cursor-pointer
+         hover:shadow-lg hover:shadow-emerald-500/30 hover:-translate-y-0.5
+         active:translate-y-0 active:shadow-md active:scale-[0.98];
+}
+
+.btn-outline {
+  @apply border-2 border-blue-500 text-blue-600 font-semibold rounded-xl
+         bg-transparent backdrop-blur-sm
+         transition-all duration-200 ease-out cursor-pointer
+         hover:bg-blue-600 hover:text-white hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5
+         active:translate-y-0 active:scale-[0.98];
+}
+
+.btn-danger {
+  @apply bg-gradient-to-r from-orange-500 to-rose-500 text-white font-semibold rounded-xl
+         shadow-md shadow-orange-500/20
+         transition-all duration-200 ease-out cursor-pointer
+         hover:shadow-lg hover:shadow-orange-500/30 hover:-translate-y-0.5
+         active:translate-y-0 active:shadow-md active:scale-[0.98];
+}
+
+/* Modern input styles */
+.input-modern {
+  @apply w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm
+         bg-gray-50/50 backdrop-blur-sm
+         focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 focus:bg-white
+         placeholder-gray-400
+         transition-all duration-200;
+}
+
+/* Touch feedback for mobile */
+@media (hover: none) {
+  .btn-primary, .btn-secondary, .btn-outline, .btn-danger {
+    @apply active:scale-95 active:opacity-90;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* A4 print styles */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+  }
+
+  /* Hide everything except the cover page */
+  .no-print {
+    display: none !important;
+  }
+
+  /* The outer app wrapper should not add bg/padding */
+  #root > div {
+    background: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    display: block !important;
+  }
+
+  .a4-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+  }
+}
