@@ -244,9 +244,24 @@ export default function InputForm({ data, onChange, initialGroupId }) {
     // Build the current filter criteria for static course data
     function getCourseFilter() {
         const dept = deptAbbr(data.departmentName);
-        const roll = isGroupMode ? "" : data.studentRoll;
-        const series = seriesFromRoll(roll);
-        const section = isGroupMode ? "" : (data.section || "");
+
+        if (isGroupMode) {
+            // In group mode, check if ANY member matches dept + series + section
+            const selectedGroup = groups.find((g) => g.id === selectedGroupId);
+            const members = selectedGroup?.members || [];
+            for (const member of members) {
+                const roll = member.roll || "";
+                const series = seriesFromRoll(roll);
+                const section = member.section || sectionFromRoll(roll);
+                if (dept && series && section) {
+                    return { department: dept, series, section };
+                }
+            }
+            return { department: dept || undefined, series: undefined, section: undefined };
+        }
+
+        const series = seriesFromRoll(data.studentRoll);
+        const section = data.section || "";
         return { department: dept || undefined, series: series || undefined, section: section || undefined };
     }
 
@@ -274,7 +289,7 @@ export default function InputForm({ data, onChange, initialGroupId }) {
         setCourseSuggestions({ codes, titles });
     }
 
-    // Re-compute course & experiment suggestions when dept/roll/section changes
+    // Re-compute course & experiment suggestions when dept/roll/section/group changes
     useEffect(() => {
         refreshCourseSuggestions();
         // Only show experiment suggestions when filter is complete
@@ -283,7 +298,7 @@ export default function InputForm({ data, onChange, initialGroupId }) {
         } else {
             setExperimentSuggestions([]);
         }
-    }, [data.departmentName, data.studentRoll, data.section]);
+    }, [data.departmentName, data.studentRoll, data.section, selectedGroupId, groups]);
 
     function refreshStudentSuggestions() {
         const students = getSavedStudents();
