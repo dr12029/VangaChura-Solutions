@@ -27,7 +27,7 @@ export default function CoverPage({ data }) {
                         src="/RUET_logo.png"
                         alt="RUET Logo"
                         className=""
-                        style={{ width: "200px", height: "200px", objectFit: "contain" }}
+                        style={{ width: "160px", objectFit: "contain" }}
                     />
 
                     {/* Department */}
@@ -65,7 +65,7 @@ export default function CoverPage({ data }) {
 
                     <table style={{ width: "100%" }}>
                         <tbody>
-                            <Row label={noLabel} value={data.experimentNo} />
+                            <Row label={noLabel} value={data.experimentNo ? String(parseInt(data.experimentNo, 10) || 0).padStart(2, "0") : data.experimentNo} />
                             {!hideNameRow && (
                                 <Row label={nameLabel} value={data.experimentName} />
                             )}

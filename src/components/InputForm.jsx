@@ -6,6 +6,17 @@ import { getGroups } from "../services/firestoreService";
 import { addHistory } from "../services/firestoreService";
 import { getTeacherCourses, saveTeacherCourse } from "../services/firestoreService";
 import { getTeacherNames, findTeacher } from "../data/teachers";
+import {
+    getCourseCodes,
+    getCourseTitles,
+    findCourseByCode,
+    findCourseByTitle,
+    getExperimentNos,
+    findExperimentName,
+    deptAbbr,
+    seriesFromRoll,
+    padExpNo,
+} from "../data/courses";
 
 const DEPARTMENTS = [
     "Electrical & Electronic Engineering (EEE)",
@@ -176,10 +187,38 @@ export default function InputForm({ data, onChange, initialGroupId }) {
     const { user } = useAuth();
     const [courseSuggestions, setCourseSuggestions] = useState({ codes: [], titles: [] });
     const [studentSuggestions, setStudentSuggestions] = useState({ names: [], rolls: [] });
+    const [experimentSuggestions, setExperimentSuggestions] = useState([]);
     const [groups, setGroups] = useState([]);
     const [selectedGroupId, setSelectedGroupId] = useState(initialGroupId || "");
     const [downloading, setDownloading] = useState(false);
     const [firestoreTeacherCourses, setFirestoreTeacherCourses] = useState([]);
+
+    // Ref always holds the latest data so blur handlers never read stale state
+    const dataRef = useRef(data);
+    useEffect(() => { dataRef.current = data; }, [data]);
+
+    // One-time cleanup: remove junk partial entries from localStorage
+    useEffect(() => {
+        // Clean courses: keep only entries where code looks like a valid course code (has a space + digit)
+        try {
+            const courses = getSavedCourses();
+            const cleaned = courses.filter((c) => c.code && /^[A-Z]{2,5}\s\d{3,5}$/i.test(c.code.trim()));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+        } catch { /* ignore */ }
+        // Clean students: keep only entries where roll is at least 5 digits
+        try {
+            const students = getSavedStudents();
+            const seen = new Set();
+            const cleaned = students.filter((s) => {
+                if (!s.roll || s.roll.length < 5) return false;
+                const key = s.roll.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            localStorage.setItem(STUDENTS_KEY, JSON.stringify(cleaned));
+        } catch { /* ignore */ }
+    }, []);
 
     // Load saved data on mount
     useEffect(() => {
@@ -202,13 +241,49 @@ export default function InputForm({ data, onChange, initialGroupId }) {
 
     const isGroupMode = !!selectedGroupId;
 
-    function refreshCourseSuggestions() {
-        const courses = getSavedCourses();
-        setCourseSuggestions({
-            codes: courses.map((c) => c.code).filter(Boolean),
-            titles: courses.map((c) => c.title).filter(Boolean),
-        });
+    // Build the current filter criteria for static course data
+    function getCourseFilter() {
+        const dept = deptAbbr(data.departmentName);
+        const roll = isGroupMode ? "" : data.studentRoll;
+        const series = seriesFromRoll(roll);
+        const section = isGroupMode ? "" : (data.section || "");
+        return { department: dept || undefined, series: series || undefined, section: section || undefined };
     }
+
+    // Check whether all 3 filter fields (dept, series, section) are filled
+    function isFilterComplete() {
+        const f = getCourseFilter();
+        return !!(f.department && f.series && f.section);
+    }
+
+    function refreshCourseSuggestions() {
+        const localCourses = getSavedCourses();
+        const localCodes = localCourses.map((c) => c.code).filter(Boolean);
+        const localTitles = localCourses.map((c) => c.title).filter(Boolean);
+        // Only show static course suggestions when dept + series + section are ALL set
+        let staticCodes = [];
+        let staticTitles = [];
+        if (isFilterComplete()) {
+            const filter = getCourseFilter();
+            staticCodes = getCourseCodes(filter);
+            staticTitles = getCourseTitles(filter);
+        }
+        // Merge & deduplicate (static first, then localStorage extras)
+        const codes = [...new Set([...staticCodes, ...localCodes])];
+        const titles = [...new Set([...staticTitles, ...localTitles])];
+        setCourseSuggestions({ codes, titles });
+    }
+
+    // Re-compute course & experiment suggestions when dept/roll/section changes
+    useEffect(() => {
+        refreshCourseSuggestions();
+        // Only show experiment suggestions when filter is complete
+        if (data.courseCode && isFilterComplete()) {
+            setExperimentSuggestions(getExperimentNos(data.courseCode, getCourseFilter()));
+        } else {
+            setExperimentSuggestions([]);
+        }
+    }, [data.departmentName, data.studentRoll, data.section]);
 
     function refreshStudentSuggestions() {
         const students = getSavedStudents();
@@ -222,12 +297,34 @@ export default function InputForm({ data, onChange, initialGroupId }) {
         const val = typeof e === "string" ? e : e.target.value;
         const updated = { ...data, [key]: val };
 
-        // Auto-fill title when code is selected from memory (and vice-versa)
+        const filter = getCourseFilter();
+
+        // Auto-fill title when code is selected
         if (key === "courseCode") {
-            const match = getSavedCourses().find(
-                (c) => c.code.toLowerCase() === val.toLowerCase()
-            );
-            if (match && match.title) updated.courseTitle = match.title;
+            // Only use static data when all filter criteria match
+            if (isFilterComplete()) {
+                const staticMatch = findCourseByCode(val, filter);
+                if (staticMatch) {
+                    updated.courseTitle = staticMatch.courseTitle;
+                }
+            }
+            // Fall back to localStorage memory if static didn't match
+            if (!updated.courseTitle || updated.courseTitle === data.courseTitle) {
+                const localMatch = getSavedCourses().find(
+                    (c) => c.code.toLowerCase() === val.toLowerCase()
+                );
+                if (localMatch && localMatch.title) updated.courseTitle = localMatch.title;
+            }
+
+            // Update experiment number suggestions (only from static when filter is complete)
+            if (isFilterComplete()) {
+                setExperimentSuggestions(getExperimentNos(val, filter));
+            } else {
+                setExperimentSuggestions([]);
+            }
+            // Reset experiment fields when course changes
+            updated.experimentNo = "";
+            updated.experimentName = "";
 
             // Auto-fill teacher from teacher-course pairing
             const pairing = findTeacherForCourseAll(val);
@@ -241,10 +338,32 @@ export default function InputForm({ data, onChange, initialGroupId }) {
             }
         }
         if (key === "courseTitle") {
-            const match = getSavedCourses().find(
-                (c) => c.title.toLowerCase() === val.toLowerCase()
-            );
-            if (match && match.code) updated.courseCode = match.code;
+            if (isFilterComplete()) {
+                const staticMatch = findCourseByTitle(val, filter);
+                if (staticMatch) {
+                    updated.courseCode = staticMatch.courseCode;
+                    setExperimentSuggestions(getExperimentNos(staticMatch.courseCode, filter));
+                    updated.experimentNo = "";
+                    updated.experimentName = "";
+                }
+            }
+            // Fall back to localStorage memory
+            if (!updated.courseCode || updated.courseCode === data.courseCode) {
+                const localMatch = getSavedCourses().find(
+                    (c) => c.title.toLowerCase() === val.toLowerCase()
+                );
+                if (localMatch && localMatch.code) updated.courseCode = localMatch.code;
+            }
+        }
+
+        // Auto-fill experiment name when experiment number is selected
+        if (key === "experimentNo") {
+            if (isFilterComplete()) {
+                const expName = findExperimentName(data.courseCode, val, filter);
+                if (expName) updated.experimentName = expName;
+            }
+            // Format experiment no as 2 digits for storage
+            if (val) updated.experimentNo = padExpNo(val);
         }
 
         // Auto-fill roll when name is selected from memory (and vice-versa)
@@ -280,6 +399,33 @@ export default function InputForm({ data, onChange, initialGroupId }) {
         onChange(updated);
     };
 
+    // --- Blur handlers save pairings using the ref (always fresh data) ---
+    const handleStudentBlur = () => {
+        const d = dataRef.current;
+        if (d.studentName && d.studentRoll) {
+            saveStudent(d.studentName, d.studentRoll);
+            refreshStudentSuggestions();
+        }
+    };
+
+    const handleCourseBlur = () => {
+        const d = dataRef.current;
+        if (d.courseCode && d.courseTitle) {
+            saveCourse(d.courseCode, d.courseTitle);
+            refreshCourseSuggestions();
+        }
+    };
+
+    const handleTeacherBlur = () => {
+        const d = dataRef.current;
+        if (d.courseCode && d.teacherName) {
+            saveTeacherCourseLocal(d.courseCode, d.teacherName);
+            if (user) {
+                saveTeacherCourse(user.uid, d.courseCode, d.teacherName).catch(() => { });
+            }
+        }
+    };
+
     // Helper to find teacher for a course code (checks Firestore pairings first, then localStorage)
     function findTeacherForCourseAll(courseCode) {
         if (!courseCode) return null;
@@ -294,32 +440,6 @@ export default function InputForm({ data, onChange, initialGroupId }) {
         // Fall back to localStorage
         return findTeacherForCourse(courseCode);
     }
-
-    // Save course pair when either field loses focus
-    const handleCourseBlur = () => {
-        if (data.courseCode || data.courseTitle) {
-            saveCourse(data.courseCode, data.courseTitle);
-            refreshCourseSuggestions();
-        }
-    };
-
-    // Save teacher-course pairing when teacher or course fields lose focus
-    const handleTeacherBlur = () => {
-        if (data.courseCode && data.teacherName) {
-            saveTeacherCourseLocal(data.courseCode, data.teacherName);
-            if (user) {
-                saveTeacherCourse(user.uid, data.courseCode, data.teacherName).catch(() => { });
-            }
-        }
-    };
-
-    // Save student pair when either field loses focus
-    const handleStudentBlur = () => {
-        if (data.studentName || data.studentRoll) {
-            saveStudent(data.studentName, data.studentRoll);
-            refreshStudentSuggestions();
-        }
-    };
 
     const handlePrint = () => {
         // Save to history if logged in
@@ -543,8 +663,50 @@ export default function InputForm({ data, onChange, initialGroupId }) {
                 </select>
             </div>
 
-            {/* Course Code — autocomplete from memory */}
-            <div>
+            {/* Student Name, Roll, Section — above course fields (only in individual mode) */}
+            {!isGroupMode && (
+                <>
+                    <div onBlur={handleStudentBlur}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Student Name
+                        </label>
+                        <AutocompleteInput
+                            value={data.studentName}
+                            onChange={(val) => handleChange("studentName")(val)}
+                            suggestions={studentSuggestions.names}
+                            placeholder="Md. Example"
+                            className={inputClass}
+                        />
+                    </div>
+                    <div onBlur={handleStudentBlur}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Student Roll
+                        </label>
+                        <AutocompleteInput
+                            value={data.studentRoll}
+                            onChange={(val) => handleChange("studentRoll")(val)}
+                            suggestions={studentSuggestions.rolls}
+                            placeholder="2103001"
+                            className={inputClass}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Section
+                        </label>
+                        <input
+                            type="text"
+                            value={data.section}
+                            onChange={handleChange("section")}
+                            placeholder="A"
+                            className={inputClass}
+                        />
+                    </div>
+                </>
+            )}
+
+            {/* Course Code — autocomplete from static + memory */}
+            <div onBlur={handleCourseBlur}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Course Code
                 </label>
@@ -555,11 +717,10 @@ export default function InputForm({ data, onChange, initialGroupId }) {
                     placeholder="EEE 1102"
                     className={inputClass}
                 />
-                <input type="hidden" onBlur={handleCourseBlur} />
             </div>
 
-            {/* Course Title — autocomplete from memory */}
-            <div>
+            {/* Course Title — autocomplete from static + memory */}
+            <div onBlur={handleCourseBlur}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Course Title
                 </label>
@@ -577,11 +738,10 @@ export default function InputForm({ data, onChange, initialGroupId }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     {isAssignment ? "Assignment No" : "Experiment No"}
                 </label>
-                <input
-                    type="text"
+                <AutocompleteInput
                     value={data.experimentNo}
-                    onChange={handleChange("experimentNo")}
-                    onBlur={handleCourseBlur}
+                    onChange={(val) => handleChange("experimentNo")(val)}
+                    suggestions={experimentSuggestions}
                     placeholder="01"
                     className={inputClass}
                 />
@@ -607,11 +767,6 @@ export default function InputForm({ data, onChange, initialGroupId }) {
 
             {/* Remaining simple fields */}
             {[
-                ...(!isGroupMode ? [
-                    { key: "studentName", label: "Student Name", placeholder: "Md. Example", autocomplete: true, suggestions: studentSuggestions.names, onBlur: handleStudentBlur },
-                    { key: "studentRoll", label: "Student Roll", placeholder: "2103001", autocomplete: true, suggestions: studentSuggestions.rolls, onBlur: handleStudentBlur },
-                    { key: "section", label: "Section", placeholder: "A" },
-                ] : []),
                 { key: "teacherName", label: "Teacher Name", placeholder: "Dr. Example", autocomplete: true, suggestions: getTeacherNames(), onBlur: handleTeacherBlur },
                 {
                     key: "designation",
@@ -631,20 +786,18 @@ export default function InputForm({ data, onChange, initialGroupId }) {
                     type: "date",
                 },
             ].map(({ key, label, placeholder, type, autocomplete, suggestions, onBlur }) => (
-                <div key={key}>
+                <div key={key} onBlur={onBlur}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                         {label}
                     </label>
                     {autocomplete ? (
-                        <div onBlur={onBlur}>
-                            <AutocompleteInput
-                                value={data[key]}
-                                onChange={(val) => handleChange(key)(val)}
-                                suggestions={suggestions}
-                                placeholder={placeholder}
-                                className={inputClass}
-                            />
-                        </div>
+                        <AutocompleteInput
+                            value={data[key]}
+                            onChange={(val) => handleChange(key)(val)}
+                            suggestions={suggestions}
+                            placeholder={placeholder}
+                            className={inputClass}
+                        />
                     ) : (
                         <input
                             type={type || "text"}
