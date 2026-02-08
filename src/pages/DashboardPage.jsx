@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ProfileSection from "../components/ProfileSection";
 import GroupsSection from "../components/GroupsSection";
 import HistorySection from "../components/HistorySection";
-import { FaUser, FaUsers, FaHistory, FaSignOutAlt } from "react-icons/fa";
+import { FaUser, FaUsers, FaHistory, FaSignOutAlt, FaShieldAlt } from "react-icons/fa";
 import { motion } from "framer-motion";
 
 const TABS = [
@@ -14,7 +14,7 @@ const TABS = [
 ];
 
 export default function DashboardPage() {
-    const { user, profile, logout } = useAuth();
+    const { user, profile, isAdmin, logout } = useAuth();
     const navigate = useNavigate();
     const [tab, setTab] = useState("profile");
 
@@ -41,13 +41,24 @@ export default function DashboardPage() {
                         </h1>
                         <p className="text-gray-500 text-xs sm:text-sm mt-0.5 truncate">{user?.email}</p>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 transition-all duration-200 cursor-pointer shrink-0 ml-4 px-3 py-2 rounded-xl hover:bg-red-50"
-                    >
-                        <FaSignOutAlt size={14} />
-                        <span className="hidden sm:inline">Log Out</span>
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                        {isAdmin && (
+                            <Link
+                                to="/admin"
+                                className="flex items-center gap-1.5 text-sm font-medium text-indigo-500 hover:text-indigo-700 transition-all duration-200 cursor-pointer px-3 py-2 rounded-xl hover:bg-indigo-50"
+                            >
+                                <FaShieldAlt size={14} />
+                                <span className="hidden sm:inline">Admin</span>
+                            </Link>
+                        )}
+                        <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 transition-all duration-200 cursor-pointer px-3 py-2 rounded-xl hover:bg-red-50"
+                        >
+                            <FaSignOutAlt size={14} />
+                            <span className="hidden sm:inline">Log Out</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 

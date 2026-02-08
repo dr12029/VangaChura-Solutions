@@ -71,7 +71,9 @@ export function AuthProvider({ children }) {
         setProfile(snap.exists() ? snap.data() : null);
     }
 
-    const value = { user, profile, loading, signup, login, logout, refreshProfile };
+    const isAdmin = profile?.role === "admin";
+
+    const value = { user, profile, isAdmin, loading, signup, login, logout, refreshProfile };
 
     return (
         <AuthContext.Provider value={value}>

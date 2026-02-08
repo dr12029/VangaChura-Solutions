@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAuth } from "../contexts/AuthContext";
 import { motion } from "framer-motion";
+import PolicyModal from "../components/PolicyModal";
 
 export default function SignupPage() {
     const { signup } = useAuth();
@@ -13,6 +14,8 @@ export default function SignupPage() {
     const [confirm, setConfirm] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [agreed, setAgreed] = useState(false);
+    const [showPolicy, setShowPolicy] = useState(false);
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -115,9 +118,31 @@ export default function SignupPage() {
                     />
                 </div>
 
+                {/* Policy agreement */}
+                <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={agreed}
+                        onChange={(e) => setAgreed(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-500 leading-relaxed">
+                        I agree to the{" "}
+                        <button
+                            type="button"
+                            onClick={() => setShowPolicy(true)}
+                            className="text-blue-600 hover:underline font-medium cursor-pointer"
+                        >
+                            Privacy Policy &amp; Terms of Use
+                        </button>
+                    </span>
+                </label>
+
+                <PolicyModal open={showPolicy} onClose={() => setShowPolicy(false)} />
+
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !agreed}
                     className="w-full btn-primary py-2.5 disabled:opacity-50"
                 >
                     {loading ? "Creating account…" : "Sign Up"}
